@@ -276,3 +276,89 @@ was within the available budget, both Safe-to-Agent and Agent-to-merchant deltas
 were exact, the hosted settlement receipt succeeded, and the Agent Wallet kept
 the expected 0.001 USDC remainder. Evidence is written to the ignored
 `milestone3-x402-result.json` file.
+
+## Milestone 4 — Protected economic rights
+
+Milestone 4 adds a completely separate economic-ownership path over the official
+Splits protocol. It does not change the Safe treasury, operating-budget, Agent
+Wallet, x402, or hosted-facilitator paths from Milestones 1–3.
+
+The selected implementation is Splits V2.2 PushSplit. PushSplit was selected
+because the configured recipient set is small and the protocol transfers ERC-20
+balances directly to recipients, making balance-delta evidence straightforward.
+`@0xsplits/splits-sdk@6.6.0` is pinned. The adapter uses the package's official
+V2.2 factory address, factory ABI, Split ABI, supported-chain list, recipient
+limit, and proxy-bytecode classifier. It invokes those official contracts with
+viem so Pact's integer basis points can be passed directly; the higher-level SDK
+creation helper represents percentages as JavaScript numbers and would introduce
+floating-point values at the protocol boundary.
+
+`RevenueSplit`, `RevenueShare`, and `RevenueDistributionResult` are Pact domain
+types. `RevenueSplitService` validates application invariants and emits normalized
+`REVENUE_SPLIT_CREATED`, `REVENUE_RECEIVED`, and `REVENUE_DISTRIBUTED` events.
+`RevenueSplitAdapter` keeps every Splits-specific object behind a narrow port, and
+`SplitsV2PushSplitAdapter` implements that port.
+
+Pact requires all allocations to be positive integer basis points totaling
+exactly 10,000, even though Splits V2 permits arbitrary allocation totals. Empty,
+malformed, zero, duplicate, fractional, negative, over-10,000, non-totaling, and
+mutable inputs are rejected. Recipients are normalized and sorted before the
+official factory call.
+
+The split is immutable from inception: both owner and creator are set to the zero
+address. Read-back verification identifies the official PushSplit implementation
+from clone bytecode, confirms the V2.2 EIP-712 domain, reads `owner()` and
+`splitHash()`, loads the exact `SplitUpdated` event at `updateBlockNumber`, and
+recomputes the Solidity struct hash. A split is accepted only when the owner is
+zero and the stored hash matches the authoritative event configuration. With no
+owner, `updateSplit`, `setPaused`, ownership transfer, and owner-authorized call
+execution cannot be initiated by the deployer, Safe, Agent Wallet, or another
+account.
+
+Rounding follows the audited protocol implementation rather than a Pact-defined
+rule. Full-balance PushSplit distribution reserves one atomic unit from each
+non-empty Split/Warehouse balance; each recipient allocation then uses Solidity
+floor division independently, leaving any additional division dust in the split.
+The live test derives the smallest positive funding amount whose distributable
+portion has zero rounding dust. It reuses `OUTSIDER_PRIVATE_KEY` as the gas-paying
+deployer/funder and the existing generic token/network configuration, so M4 does
+not introduce duplicate token, decimal, private-key, or amount variables.
+
+Deterministic verification after implementation:
+
+```text
+npm run build                    # passed
+npm test                         # 5 files, 62 tests passed
+```
+
+The M4 live suite is gated by `RUN_LIVE_M4=true`. It passed on Base Sepolia with
+the existing outsider test wallet acting only as gas-paying deployer, funder, and
+permissionless distributor. The resulting immutable PushSplit is:
+
+| Item | Value |
+| --- | --- |
+| PushSplit | `0x744052918Ad03470723Ac942f0c8381c50A99489` |
+| Creation transaction | `0xf0ce85b67aaf206d8661f07037e2ea5ccf0659f38d6cb5880763d661d4fa6744` |
+| Funding transaction | `0x47e6a931d5f0f3cbf400119e4aada0cb062c79ab907241450f8412ad389faa0f` |
+| Distribution transaction | `0xc1dcd6cdfe27f6b38a1f1f86d84beac47600d15391518dfc4a0616235487f735` |
+| Token | Base Sepolia USDC `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+| Funding | 21 atomic units |
+| Distributed | 20 atomic units |
+| Protocol reserve | 1 atomic unit |
+
+The configured ownership and observed atomic-USDC deltas were:
+
+| Recipient | Allocation | Delta |
+| --- | ---: | ---: |
+| `0x4D4b99E08556ba008F8d59148a295a07855Be9B8` | 4,000 bps | 8 |
+| `0x601b9AB41DEB8eA6DbC250d2613b102A4297b8d1` | 3,500 bps | 7 |
+| `0xAdC1B42536F3EAD7a16D70de99DD2db54d768f8A` | 2,500 bps | 5 |
+
+Authoritative verification identified the official V2.2 PushSplit bytecode,
+confirmed `owner()` is the zero address, loaded the current `SplitUpdated` event
+at `updateBlockNumber`, and independently recomputed a matching `splitHash()`.
+The Agent Wallet, Safe, and deployer each received zero and held no control.
+
+Evidence for the successful run is stored in the ignored
+`milestone4-result.json`; `RUN_LIVE_M4` was returned to `false` afterward to
+prevent accidental repeat spending.

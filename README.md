@@ -1,7 +1,8 @@
 # Pact — collective Safe budgets and standard x402 payments
 
-Pact currently implements three narrow capabilities. Milestone 3 connects the
-first two through an explicit, collectively approved operating-budget transfer:
+Pact currently implements four narrow capabilities. Milestone 3 connects the
+first two through an explicit, collectively approved operating-budget transfer,
+while Milestone 4 adds an independent economic-ownership path:
 
 ```text
 M-of-N Safe owners
@@ -17,6 +18,11 @@ Safe ERC-20 transaction -- threshold approvals --> Agent Wallet
                                                     |
                                                     v
                                      Coinbase CDP hosted facilitator
+
+Immutable economic ownership
+        |
+        v
+Splits V2.2 PushSplit -- permissionless distribution --> team recipients
 ```
 
 The Agent Wallet is only the transfer recipient. It is not a Safe owner, module,
@@ -175,13 +181,62 @@ The current proposal/action store is deliberately in memory. Restart recovery
 would require a durable proposal store and a Safe Transaction Service integration;
 neither changes the authorization boundary, but neither is claimed by this MVP.
 
+## Milestone 4: protected economic rights
+
+`RevenueSplit` is the Pact domain object, `RevenueSplitService` is the
+application service, and `RevenueSplitAdapter` is the protocol boundary.
+`SplitsV2PushSplitAdapter` is the only component that owns official Splits V2.2
+contract structs, ABIs, deployment addresses, event logs, and wallet clients.
+
+Milestone 4 creates an official V2.2 PushSplit with `owner` set to the zero
+address at initialization. The deployer receives no control, and the creator
+metadata field is also set to zero. The adapter independently reads `owner()`,
+`splitHash()`, `updateBlockNumber()`, the V2.2 EIP-712 domain, proxy bytecode,
+and the authoritative `SplitUpdated` event. It accepts the split only when the
+bytecode identifies an official PushSplit, the owner is zero, and a locally
+recomputed hash of the event configuration equals the stored hash.
+
+Pact allocations are integer basis points and must total exactly 10,000. The
+underlying protocol permits arbitrary totals, so this is intentionally enforced
+at the Pact boundary. The adapter passes integer basis points directly to the
+official factory ABI instead of using the SDK convenience API's floating-point
+percentage representation. Token quantities use `bigint` throughout.
+
+PushSplit V2.2 full-balance distribution leaves one atomic unit in every
+non-empty Split/Warehouse balance. Each recipient amount is independently
+floored with Solidity integer division, and any additional division remainder
+stays in the PushSplit. Deterministic tests encode both rules. The live test
+derives the smallest funding amount whose distributable portion divides exactly
+across the configured allocations; no live amount variable is required.
+
+The Agent Wallet, Safe, and deployer gain no control or revenue merely because
+of their operational roles. If explicitly listed as recipients, they receive
+only their configured share and still have no mutation authority. Milestone 4
+does not fund the Agent Wallet, invoke Safe approvals, call Qwen, or use x402.
+
+The live test is separate and opt-in:
+
+```bash
+# Configure RUN_LIVE_M4=true and the Milestone 4 variables in .env first.
+npm run test:milestone4-live
+```
+
+It reuses the existing RPC, token, outsider test wallet, Safe, and Agent Wallet
+configuration. It creates a fresh immutable PushSplit, reads back and hashes the
+authoritative configuration, transfers the derived small ERC-20 amount to it,
+distributes, uses bounded uncached balance polling, checks exact recipient deltas,
+and verifies that the Agent Wallet, Safe, and deployer receive nothing unless
+configured as recipients. Non-secret evidence is written to
+`milestone4-result.json`.
+
 ## Full live verification
 
 ```bash
 npm run test:integration
 ```
 
-This command discovers all three live suites. Milestone 3 remains skipped unless
-`RUN_LIVE_M3=true`; when enabled, it spends the configured chain's gas token and
-ERC-20 balance. Milestone 2 continues to use Coinbase CDP's hosted facilitator;
-Milestone 3 does not replace or modify that settlement path.
+This command discovers all four live suites. Milestones 3 and 4 remain skipped
+unless their respective `RUN_LIVE_*` flags are enabled; when enabled, they spend
+the configured chain's gas token and ERC-20 balance. Milestone 2 continues to use
+Coinbase CDP's hosted facilitator; neither Milestone 3 nor Milestone 4 replaces
+or modifies that settlement path.
