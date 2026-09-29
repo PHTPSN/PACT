@@ -19,6 +19,9 @@ There is no ownership, module, delegation, funding, or permission relationship
 between the Safe and the Agent Wallet. Connecting them is intentionally deferred
 to a later milestone.
 
+The implementation history, architecture decisions, live transaction evidence,
+and encountered issues are recorded in [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md).
+
 ## Installation and local checks
 
 The repository uses npm and pins the architecture-critical Safe, CDP, x402, and
