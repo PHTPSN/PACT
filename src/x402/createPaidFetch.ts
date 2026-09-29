@@ -1,12 +1,6 @@
-import { x402Erc7710Client } from '@metamask/x402'
-import {
-  METAMASK_FACILITATOR_ADDRESSES_DEV,
-  createx402DelegationProvider,
-} from '@metamask/smart-accounts-kit/experimental'
-import { decodeDelegations } from '@metamask/smart-accounts-kit/utils'
 import { x402Client, x402HTTPClient } from '@x402/core/client'
+import { registerExactEvmScheme } from '@x402/evm/exact/client'
 import { wrapFetchWithPayment } from '@x402/fetch'
-import { getAddress } from 'viem'
 
 import {
   BASE_SEPOLIA_NETWORK,
@@ -22,32 +16,23 @@ import type {
 function now(): string {
   return new Date().toISOString()
 }
+function readString(
+  extra: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): string {
+  const value = extra?.[key]
+  return typeof value === 'string' ? value : ''
+}
 
 export function createPaidFetch({
-  agentAccount,
-  rootPermissionContext,
-  environment,
+  agentWalletAccount,
   maximumPaymentAmount = ONE_USDC,
-  childExpirySeconds = 300,
-  facilitatorAddresses = METAMASK_FACILITATOR_ADDRESSES_DEV,
+  expectedPayTo,
   fetch: baseFetch = globalThis.fetch,
 }: PaidFetchConfig) {
   if (maximumPaymentAmount <= 0n) {
     throw new Error('maximumPaymentAmount must be greater than zero.')
   }
-  if (!Number.isSafeInteger(childExpirySeconds) || childExpirySeconds <= 0) {
-    throw new Error('childExpirySeconds must be a positive integer.')
-  }
-  const delegationChain = decodeDelegations(rootPermissionContext)
-  const parentDelegation = delegationChain[0]
-  const rootDelegation = delegationChain.at(-1)
-  if (!parentDelegation || !rootDelegation) {
-    throw new Error('rootPermissionContext must contain a delegation chain.')
-  }
-  if (parentDelegation.delegate.toLowerCase() !== agentAccount.address.toLowerCase()) {
-    throw new Error('The root delegation is not delegated to this AgentSession.')
-  }
-  const rootDelegator = getAddress(rootDelegation.delegator)
 
   return async function paidFetch<T = unknown>(
     input: RequestInfo | URL,
@@ -55,33 +40,30 @@ export function createPaidFetch({
   ): Promise<PaidFetchResult<T>> {
     const audit: PaidFetchAuditEvent[] = []
     let attempt = 0
-
-    const delegationProvider = createx402DelegationProvider({
-      account: agentAccount,
-      from: agentAccount.address,
-      environment,
-      parentPermissionContext: rootPermissionContext,
-      expirySeconds: childExpirySeconds,
-      redeemers: {
-        requireRedeemers: true,
-        addresses: [...facilitatorAddresses],
-      },
+    const coreClient = new x402Client().setSpendControls({
+      maxAmountPerPayment: false,
+      allowedAssets: [
+        {
+          network: BASE_SEPOLIA_NETWORK,
+          asset: BASE_SEPOLIA_USDC,
+          maxAmountPerPayment: maximumPaymentAmount.toString(),
+        },
+      ],
     })
-    const delegatedScheme = new x402Erc7710Client({ delegationProvider })
-    const coreClient = new x402Client()
-      .setSpendControls({
-        maxAmountPerPayment: false,
-        allowedAssets: [
-          {
-            network: BASE_SEPOLIA_NETWORK,
-            asset: BASE_SEPOLIA_USDC,
-            maxAmountPerPayment: maximumPaymentAmount.toString(),
-          },
-        ],
-      })
-      .register(BASE_SEPOLIA_NETWORK, delegatedScheme)
+    registerExactEvmScheme(coreClient, {
+      signer: agentWalletAccount,
+      networks: [BASE_SEPOLIA_NETWORK],
+    })
 
     coreClient.onBeforePaymentCreation(async ({ selectedRequirements }) => {
+      const transferMethod = readString(
+        selectedRequirements.extra,
+        'assetTransferMethod',
+      )
+      const paymentFlow = readString(selectedRequirements.extra, 'paymentFlow')
+      if (selectedRequirements.scheme !== 'exact') {
+        return { abort: true, reason: 'Only the exact x402 scheme is allowed.' }
+      }
       if (selectedRequirements.network !== BASE_SEPOLIA_NETWORK) {
         return { abort: true, reason: 'Only Base Sepolia payments are allowed.' }
       }
@@ -94,12 +76,24 @@ export function createPaidFetch({
           reason: `Payment amount ${selectedRequirements.amount} exceeds the local per-payment ceiling ${maximumPaymentAmount}.`,
         }
       }
+      if (
+        expectedPayTo &&
+        selectedRequirements.payTo.toLowerCase() !== expectedPayTo.toLowerCase()
+      ) {
+        return { abort: true, reason: 'The requested payTo address is not trusted.' }
+      }
+      if (transferMethod !== 'eip3009' || paymentFlow !== 'authorization') {
+        return {
+          abort: true,
+          reason: 'Only EIP-3009 authorization payments are allowed.',
+        }
+      }
     })
     coreClient.onAfterPaymentCreation(async () => {
       audit.push({
-        phase: 'delegated-payment-created',
-        agentSession: agentAccount.address,
-        rootDelegator,
+        phase: 'payment-created',
+        payer: agentWalletAccount.address,
+        authorizationMethod: 'eip3009',
         at: now(),
       })
     })
@@ -121,10 +115,13 @@ export function createPaidFetch({
         if (accepted) {
           audit.push({
             phase: 'payment-required',
+            scheme: accepted.scheme,
             network: accepted.network,
             asset: accepted.asset,
             amount: accepted.amount,
             payTo: accepted.payTo,
+            assetTransferMethod: readString(accepted.extra, 'assetTransferMethod'),
+            paymentFlow: readString(accepted.extra, 'paymentFlow'),
             at: now(),
           })
         }
@@ -141,16 +138,14 @@ export function createPaidFetch({
       })
       return response
     }
-    const fetchWithPayment = wrapFetchWithPayment(auditedFetch, httpClient)
-    const response = await fetchWithPayment(input, init)
-
+    const response = await wrapFetchWithPayment(auditedFetch, httpClient)(input, init)
     const firstResponse = audit.find(
       (event): event is Extract<PaidFetchAuditEvent, { phase: 'http-response' }> =>
         event.phase === 'http-response' && event.attempt === 1,
     )
     if (firstResponse?.status !== 402) {
       throw new Error(
-        `The protected x402 resource did not begin with HTTP 402 (received ${firstResponse?.status ?? 'no response'}).`,
+        `The protected resource did not begin with HTTP 402 (received ${firstResponse?.status ?? 'no response'}).`,
       )
     }
 

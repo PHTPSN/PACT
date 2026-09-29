@@ -1,108 +1,120 @@
-# Pact — Generic M-of-N Treasury and delegated x402 payments
+# Pact — Safe M-of-N custody and standard x402 payments
 
-This package implements a generic MetaMask MultiSig DeleGator treasury. Production
-code accepts any non-empty unique owner set and any integer threshold from one to
-the owner count. The canonical Alice/Bob/Carol 2-of-3 setup exists only in tests
-and the demo script.
+Pact currently proves two independent capabilities on Base Sepolia:
 
-## Commands
+```text
+Alice / Bob / Carol                 Standalone Agent Wallet
+        |                                      |
+        v                                      v
+Safe M-of-N Treasury                standard x402 exact EVM
+                                               |
+                                               v
+                                  Coinbase CDP hosted facilitator
+                                               |
+                                               v
+                                     Base Sepolia USDC
+```
+
+There is no ownership, module, delegation, funding, or permission relationship
+between the Safe and the Agent Wallet. Connecting them is intentionally deferred
+to a later milestone.
+
+## Installation and local checks
+
+The repository uses npm and pins the architecture-critical Safe, CDP, x402, and
+viem package versions in `package.json` and `package-lock.json`.
 
 ```bash
 npm install
 npm run build
-npm run test:unit
+npm test
 ```
 
-The unit suite validates configuration, counterfactual address equality, SDK
-signature generation/aggregation for multiple M-of-N fixtures, duplicate-owner
-rejection, outsider rejection, mixed-operation rejection, and signer-order
-invariance. It does not claim that an in-memory signature count is onchain
-authorization; actual threshold enforcement is covered by the Base Sepolia test.
+`npm test` runs only deterministic unit tests. Live Base Sepolia tests are
+explicit commands because they spend testnet funds and require network access.
 
-## Base Sepolia proof
+Copy `.env.example` to `.env` and configure testnet-only private keys, the Base
+Sepolia RPC URL, Coinbase CDP credentials, and the merchant address. Never use
+production keys. If a proxy is required, set `HTTP_PROXY`, `HTTPS_PROXY`, and
+keep localhost in `NO_PROXY`.
 
-Copy `.env.example` to `.env` and set all values. The three owner keys must be
-independent, and the derived treasury address must hold enough Base Sepolia ETH
-to pay ERC-4337 prefund plus the demo's one-wei transfers. The bundler URL must
-support Base Sepolia ERC-4337 EntryPoint v0.7.
+## Milestone 1: generic Safe M-of-N custody
 
-Alternatively, generate testnet-only identities without overwriting any existing
-keys. This also prints the deterministic treasury address that needs funding:
+The adapter accepts an arbitrary unique owner list and an integer threshold
+where `1 <= M <= N`. It rejects empty owner sets, malformed or zero addresses,
+duplicates, zero/fractional thresholds, and thresholds greater than the owner
+count. The generic adapter supports M=1, but the claim that no individual can
+act alone applies only when M is at least two.
+
+The canonical proof uses Alice, Bob, and Carol with threshold two and Safe
+v1.4.1. Safe contract authorization—not an application signature counter—guards
+execution. The proof reads owners, threshold, modules, ordinary guard, and
+fallback handler from the deployed Safe. Safe v1.4.1 does not implement the
+newer module-guard feature, and that unsupported state is recorded explicitly.
 
 ```bash
 npm run setup:milestone1
-```
-
-```bash
-npm run test:integration
+npm run test:milestone1-live
 npm run demo:milestone1
 ```
 
-The integration test first attempts a one-owner operation and verifies that the
-recipient balance does not change. It then submits a two-owner operation, waits
-for its receipt, and verifies the one-wei balance change. The demo exercises all
-three owner pairs, all three owners, the fourth identity's negative boundary,
-duplicate signatures, and mixed-operation signatures. It writes
-`milestone1-result.json`, including UserOperation and transaction hashes.
+The live proof checks empty and single-owner rejection at the Safe contract,
+every two-owner combination, all three owners, outsider and Agent Wallet
+rejection, duplicate-signature behavior, fresh Safe nonces, `ExecutionSuccess`
+events, and protected value movement. It writes non-secret evidence to
+`milestone1-result.json`.
 
-Private keys in `.env` are testnet-only secrets. Never reuse production keys.
+## Milestone 2: standalone Agent Wallet x402 payment
 
-## Milestone 2: ERC-7710 x402 payment
+The Agent Wallet directly holds test USDC and signs a standard x402 v2 exact-EVM
+EIP-3009 `transferWithAuthorization`. The protected Express endpoint uses the
+Coinbase CDP hosted facilitator for verification and settlement. It does not use
+a local facilitator, a self-hosted facilitator, a CDP-managed payer wallet,
+Permit2, ERC-7710, EIP-7702, or the Safe.
 
-Milestone 2 adds a real delegated payment path on Base Sepolia:
+The selected profile is:
 
-```text
-M-of-N Treasury
-  -> periodic USDC root delegation
-  -> AgentSession creates an exact-payment child delegation
-  -> x402 facilitator verifies and settles through DelegationManager onchain
-  -> the protected endpoint returns { "premiumData": "hello" }
-```
+- Network: `eip155:84532` (Base Sepolia)
+- Asset: official Base Sepolia USDC at
+  `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
+- Scheme: x402 v2 `exact`
+- Authorization: EIP-3009 authorization flow
+- Facilitator: Coinbase CDP hosted facilitator
 
-The root authority uses the ERC20 period-transfer enforcer for a 1 USDC daily
-limit and the timestamp enforcer for expiry. Each x402 child is narrowed to the
-requested token amount, payee, short expiry, and MetaMask development facilitator.
-The protected response is returned only when the x402 settlement header reports a
-successful onchain settlement. `readDelegatedBudget` queries the enforcer's
-onchain state; there is no backend budget counter.
-
-The runnable Base Sepolia demo uses `LocalErc7710Facilitator`, with the existing
-outsider test identity as the gas-paying redemption relay. This is a real
-facilitator implementation: `verify` simulates `DelegationManager.redeemDelegations`
-and `settle` submits that call and waits for its onchain receipt. The MultiSig
-Treasury remains the USDC payer. The hosted MetaMask development facilitator
-currently rejects a deployed MultiSig DeleGator with
-`invalid_exact_evm_erc7710_account_not_delegated`, so using it would change the
-required payer architecture to a Stateless7702 account.
-
-Set a Base Sepolia merchant address in `MILESTONE2_PAY_TO_ADDRESS`, then create
-the Alice+Bob-signed root authority. This writes a non-secret delegation artifact;
-the owner private keys remain only in `.env`.
+Verify the hosted capability profile before running payments:
 
 ```bash
-npm run setup:milestone2
+npm run check:milestone2-capabilities
 ```
 
-Start the protected resource server in one terminal:
+This writes `milestone2-capabilities.json` without credentials or secret
+headers. To run the endpoint and one paid request manually:
 
 ```bash
+# terminal 1
 npm run server:milestone2
-```
 
-Run the AgentSession buyer in another terminal:
-
-```bash
+# terminal 2
 npm run demo:milestone2
 ```
 
-The Treasury smart-account address—not AgentSession—must hold the Base Sepolia
-USDC being spent. It also needs the network/bundler funding required by the
-facilitator's delegated execution path. The local facilitator identity needs a
-small Base Sepolia ETH balance for redemption gas. The demo price is 0.10 USDC; the root
-period allowance is 1.00 USDC. `buildDelegationRevocationCall` returns a normal
-Treasury call that can be submitted through the existing M-of-N execution path.
+The complete live suite performs an unpaid request, a successful payment,
+onchain USDC `Transfer` verification, replay rejection without a duplicate
+charge, a fresh repeat payment, and an insufficient-balance rejection:
 
-For negative-boundary checks, `MILESTONE2_PRICE_ATOMIC` changes the server price
-and `MILESTONE2_CLIENT_MAX_ATOMIC` changes only the client's local ceiling. A
-2 USDC request (`2000000`) with a matching client ceiling reaches real contract
-simulation and is rejected by the 1 USDC/day delegation without moving funds.
+```bash
+npm run test:milestone2-live
+```
+
+It writes normalized non-secret evidence to `milestone2-result.json`. Raw payment
+signatures, private keys, CDP API secrets, and bearer credentials are never
+written to milestone artifacts.
+
+## Full live verification
+
+```bash
+npm run test:integration
+```
+
+This command performs both live milestones and therefore spends Base Sepolia
+ETH and USDC. The Safe and Agent Wallet remain architecturally independent.

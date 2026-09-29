@@ -1,51 +1,31 @@
 import 'dotenv/config'
-import { readFile, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-import { getSmartAccountsEnvironment } from '@metamask/smart-accounts-kit'
 import { getAddress, isHex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 
 import {
-  BASE_SEPOLIA_CHAIN_ID,
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC,
   ONE_USDC,
   createPaidFetch,
-  type StoredTreasuryAgentDelegation,
 } from '../../src/index.js'
 
-const privateKey = process.env.AGENT_SESSION_PRIVATE_KEY
+const privateKey = process.env.AGENT_WALLET_PRIVATE_KEY
 if (!privateKey || !isHex(privateKey) || privateKey.length !== 66) {
-  throw new Error('AGENT_SESSION_PRIVATE_KEY must be a 32-byte 0x-prefixed key.')
+  throw new Error('AGENT_WALLET_PRIVATE_KEY must be a 32-byte 0x-prefixed key.')
 }
-const artifactPath = resolve(
-  process.env.MILESTONE2_DELEGATION_PATH ?? 'milestone2-delegation.json',
-)
-const authority = JSON.parse(
-  await readFile(artifactPath, 'utf8'),
-) as StoredTreasuryAgentDelegation
-if (authority.version !== 1 || authority.chainId !== BASE_SEPOLIA_CHAIN_ID) {
-  throw new Error('The root delegation artifact is not for Base Sepolia Milestone 2.')
-}
+const payTo = process.env.MILESTONE2_PAY_TO_ADDRESS
+if (!payTo) throw new Error('MILESTONE2_PAY_TO_ADDRESS must be configured.')
 
-const agentAccount = privateKeyToAccount(privateKey)
-if (agentAccount.address.toLowerCase() !== authority.agentSession.toLowerCase()) {
-  throw new Error('AGENT_SESSION_PRIVATE_KEY does not match the delegated AgentSession.')
-}
+const agentWalletAccount = privateKeyToAccount(privateKey)
 const paidFetch = createPaidFetch({
-  agentAccount,
-  rootPermissionContext: authority.permissionContext,
-  environment: getSmartAccountsEnvironment(BASE_SEPOLIA_CHAIN_ID),
+  agentWalletAccount,
   maximumPaymentAmount: BigInt(
     process.env.MILESTONE2_CLIENT_MAX_ATOMIC ?? ONE_USDC,
   ),
-  facilitatorAddresses: [
-    getAddress(
-      privateKeyToAccount(
-        (process.env.MILESTONE2_FACILITATOR_PRIVATE_KEY ??
-          process.env.OUTSIDER_PRIVATE_KEY) as `0x${string}`,
-      ).address,
-    ),
-  ],
+  expectedPayTo: getAddress(payTo),
 })
 const endpoint =
   process.env.MILESTONE2_PREMIUM_URL ?? 'http://127.0.0.1:4021/premium'
@@ -55,6 +35,18 @@ const result = await paidFetch<{ premiumData: string }>(endpoint, {
 const output = {
   milestone: 2,
   endpoint,
+  architecture: {
+    payer: 'standalone-agent-wallet',
+    facilitator: 'coinbase-cdp-hosted',
+    protocolVersion: 2,
+    scheme: 'exact',
+    network: BASE_SEPOLIA_NETWORK,
+    asset: BASE_SEPOLIA_USDC,
+    authorizationMethod: 'eip3009',
+    paymentFlow: 'authorization',
+  },
+  agentWallet: agentWalletAccount.address,
+  payTo: getAddress(payTo),
   resource: result.resource,
   settlement: result.settlement,
   audit: result.audit,

@@ -1,38 +1,44 @@
-import {
-  Implementation,
-  toMetaMaskSmartAccount,
-} from '@metamask/smart-accounts-kit'
-import type { Hex } from 'viem'
+import type { SafeVersion } from '@safe-global/types-kit'
+import { getAddress, type Address } from 'viem'
 
-import type {
-  SmartAccountsPublicClient,
-  Treasury,
-  TreasuryConfig,
-} from './types.js'
+import type { Treasury, TreasuryConfig } from './types.js'
+import { initSafe } from './safeProtocolKit.js'
 import { validateTreasuryConfig } from './validateTreasuryConfig.js'
 
+export const PACT_SAFE_VERSION: SafeVersion = '1.4.1'
+export const PACT_SAFE_SALT_NONCE = BigInt(
+  '0x506163742d6d696c6573746f6e652d31',
+).toString()
+
 export async function createTreasury({
-  client,
+  provider,
   config,
-  deploySalt = '0x',
+  saltNonce = PACT_SAFE_SALT_NONCE,
+  safeVersion = PACT_SAFE_VERSION,
 }: {
-  client: Treasury['publicClient']
+  provider: string
   config: TreasuryConfig
-  deploySalt?: Hex
+  saltNonce?: string
+  safeVersion?: SafeVersion
 }): Promise<Treasury> {
   const validated = validateTreasuryConfig(config)
-  const account = await toMetaMaskSmartAccount({
-    client: client as SmartAccountsPublicClient,
-    implementation: Implementation.MultiSig,
-    deployParams: [[...validated.owners], BigInt(validated.threshold)],
-    deploySalt,
-  })
+  const predictedSafe = {
+    safeAccountConfig: {
+      owners: [...validated.owners],
+      threshold: validated.threshold,
+    },
+    safeDeploymentConfig: { safeVersion, saltNonce },
+  }
+  const protocolKit = await initSafe({ provider, predictedSafe })
+  const address = getAddress(await protocolKit.getAddress()) as Address
 
   return Object.freeze({
     config: validated,
-    deploySalt,
-    account,
-    address: account.address,
-    publicClient: client,
+    provider,
+    safeVersion,
+    saltNonce,
+    predictedSafe,
+    address,
+    protocolKit,
   })
 }

@@ -1,22 +1,11 @@
 import type {
-  Implementation,
-  MetaMaskSmartAccount,
-} from '@metamask/smart-accounts-kit'
-import { toMetaMaskSmartAccount } from '@metamask/smart-accounts-kit'
-import type {
-  Account,
-  Address,
-  Chain,
-  Hash,
-  Hex,
-  PublicClient,
-  Transport,
-} from 'viem'
-import type {
-  BundlerClient,
-  UserOperation,
-  UserOperationReceipt,
-} from 'viem/account-abstraction'
+  MetaTransactionData,
+  SafeTransaction,
+  SafeVersion,
+} from '@safe-global/types-kit'
+import type { Address, Hash, Hex, TransactionReceipt } from 'viem'
+
+import type { SafeProtocolKit } from './safeProtocolKit.js'
 
 export type TreasuryConfig = {
   owners: readonly Address[]
@@ -29,57 +18,58 @@ export type TreasuryCall = {
   value?: bigint
 }
 
-export type MultisigAccount = MetaMaskSmartAccount<Implementation.MultiSig>
-
-export type SmartAccountsPublicClient = Parameters<
-  typeof toMetaMaskSmartAccount<Implementation.MultiSig>
->[0]['client']
+export type TreasurySigner = {
+  address: Address
+  privateKey: Hex
+}
 
 export type Treasury = {
   config: Readonly<TreasuryConfig>
-  deploySalt: Hex
-  account: MultisigAccount
+  provider: string
+  safeVersion: SafeVersion
+  saltNonce: string
+  predictedSafe: {
+    safeAccountConfig: {
+      owners: string[]
+      threshold: number
+    }
+    safeDeploymentConfig: {
+      safeVersion: SafeVersion
+      saltNonce: string
+    }
+  }
   address: Address
-  publicClient: PublicClient<any, any, any>
+  protocolKit: SafeProtocolKit
 }
 
-export type TreasurySigner = Pick<
-  Account,
-  'address' | 'signMessage' | 'signTypedData'
->
+export type TreasuryAction = SafeTransaction
 
-export type SignerView = {
-  owner: Address
-  treasury: Treasury
-  account: MultisigAccount
+export type TreasuryProposal = {
+  treasuryAddress: Address
+  nonce: number
+  transactions: readonly MetaTransactionData[]
+  action: TreasuryAction
+}
+
+export type TreasuryInspection = {
   address: Address
+  deployed: boolean
+  version: SafeVersion
+  owners: Address[]
+  threshold: number
+  modules: Address[]
+  guard: Address
+  moduleGuard: Address
+  moduleGuardSupported: boolean
+  fallbackHandler: Address
 }
-
-export type TreasuryOperation = {
-  operationHash: Hash
-  userOperation: UserOperation<'0.7'>
-}
-
-export type BoundPartialSignature = {
-  signer: Address
-  signature: Hex
-  type: 'ECDSA'
-  operationHash: Hash
-}
-
-export type TreasuryBundlerClient = BundlerClient<
-  Transport,
-  Chain | undefined,
-  MultisigAccount | undefined
->
 
 export type ExecutionResult = {
   treasuryAddress: Address
   threshold: number
   participatingOwners: Address[]
-  userOperationHash?: Hash
   transactionHash?: Hash
   success: boolean
   error?: string
-  receipt?: UserOperationReceipt
+  receipt?: TransactionReceipt
 }

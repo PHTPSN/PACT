@@ -1,9 +1,6 @@
-import { x402ExactEvmErc7710ServerScheme } from '@metamask/x402'
-import {
-  HTTPFacilitatorClient,
-  x402ResourceServer,
-  type FacilitatorClient,
-} from '@x402/core/server'
+import { createCdpFacilitatorClient } from '@coinbase/cdp-sdk/x402'
+import { x402ResourceServer } from '@x402/core/server'
+import { ExactEvmScheme } from '@x402/evm/exact/server'
 import { paymentMiddleware } from '@x402/express'
 import express, { type Express } from 'express'
 import { getAddress, type Address } from 'viem'
@@ -11,44 +8,25 @@ import { getAddress, type Address } from 'viem'
 import {
   BASE_SEPOLIA_NETWORK,
   BASE_SEPOLIA_USDC,
-  METAMASK_BASE_SEPOLIA_FACILITATOR_URL,
+  BASE_SEPOLIA_USDC_EIP712_NAME,
+  BASE_SEPOLIA_USDC_EIP712_VERSION,
   TEN_CENTS_USDC,
 } from './constants.js'
 
 export type PremiumServerConfig = {
   payTo: Address
   amount?: bigint
-  facilitatorUrl?: string
-  facilitator?: FacilitatorClient
 }
-
 export function createPremiumServer({
   payTo,
   amount = TEN_CENTS_USDC,
-  facilitatorUrl = METAMASK_BASE_SEPOLIA_FACILITATOR_URL,
-  facilitator: suppliedFacilitator,
 }: PremiumServerConfig): Express {
   if (amount <= 0n) throw new Error('Premium endpoint price must be positive.')
 
-  const facilitator =
-    suppliedFacilitator ?? new HTTPFacilitatorClient({ url: facilitatorUrl })
-  const delegatedScheme = new x402ExactEvmErc7710ServerScheme()
-  // @metamask/x402 1.0 predates the explicit payment-flow metadata added by
-  // @x402/core 2.27. Advertise the adapter's ERC-7710 capability so the core
-  // router can validate and retain the requested transfer method.
-  Object.assign(delegatedScheme, {
-    defaultAssetTransferMethod: 'erc7710',
-    paymentFlows: {
-      ...delegatedScheme.paymentFlows,
-      erc7710: {
-        supported: ['authorization'],
-        default: 'authorization',
-      },
-    },
-  })
+  const facilitator = createCdpFacilitatorClient()
   const resourceServer = new x402ResourceServer(facilitator).register(
     BASE_SEPOLIA_NETWORK,
-    delegatedScheme,
+    new ExactEvmScheme(),
   )
   const app = express()
 
@@ -64,10 +42,17 @@ export function createPremiumServer({
             price: {
               asset: BASE_SEPOLIA_USDC,
               amount: amount.toString(),
+              extra: {
+                name: BASE_SEPOLIA_USDC_EIP712_NAME,
+                version: BASE_SEPOLIA_USDC_EIP712_VERSION,
+              },
             },
-            extra: { assetTransferMethod: 'erc7710' },
+            extra: {
+              assetTransferMethod: 'eip3009',
+              paymentFlow: 'authorization',
+            },
           },
-          description: 'Pact Milestone 2 delegated x402 resource',
+          description: 'Pact Milestone 2 standard x402 resource',
           mimeType: 'application/json',
           unpaidResponseBody: () => ({
             contentType: 'application/json',

@@ -1,9 +1,5 @@
-import type {
-  PermissionContext,
-  SmartAccountsEnvironment,
-} from '@metamask/smart-accounts-kit'
 import type { SettleResponse } from '@x402/core/types'
-import type { Account, Address } from 'viem'
+import type { Address, LocalAccount } from 'viem'
 
 export type PaidFetchAuditEvent =
   | {
@@ -14,16 +10,19 @@ export type PaidFetchAuditEvent =
     }
   | {
       phase: 'payment-required'
+      scheme: string
       network: string
       asset: string
       amount: string
       payTo: string
+      assetTransferMethod: string
+      paymentFlow: string
       at: string
     }
   | {
-      phase: 'delegated-payment-created'
-      agentSession: Address
-      rootDelegator: Address
+      phase: 'payment-created'
+      payer: Address
+      authorizationMethod: 'eip3009'
       at: string
     }
   | {
@@ -40,13 +39,9 @@ export type PaidFetchResult<T = unknown> = {
   settlement: SettleResponse
   audit: readonly PaidFetchAuditEvent[]
 }
-
 export type PaidFetchConfig = {
-  agentAccount: Account
-  rootPermissionContext: PermissionContext
-  environment: SmartAccountsEnvironment
+  agentWalletAccount: LocalAccount
   maximumPaymentAmount?: bigint
-  childExpirySeconds?: number
-  facilitatorAddresses?: readonly Address[]
+  expectedPayTo?: Address
   fetch?: typeof globalThis.fetch
 }
