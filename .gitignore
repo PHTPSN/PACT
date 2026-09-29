@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+coverage/
+milestone1-result.json
+milestone2-delegation.json
+milestone2-result.json
+milestone2-verification.json
