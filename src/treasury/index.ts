@@ -1,5 +1,6 @@
 export * from './approveTreasuryAction.js'
 export * from './connectTreasury.js'
+export * from './connectDeployedTreasury.js'
 export * from './createTreasury.js'
 export * from './deployTreasury.js'
 export * from './errors.js'

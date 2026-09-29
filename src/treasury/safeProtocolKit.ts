@@ -25,6 +25,7 @@ export type SafeProtocolKit = {
   getGuard(): Promise<string>
   getModuleGuard(): Promise<string>
   getFallbackHandler(): Promise<string>
+  getTransactionHash(action: SafeTransaction): Promise<string>
   createTransaction(input: {
     transactions: MetaTransactionData[]
     options?: { nonce: number }

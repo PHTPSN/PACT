@@ -183,3 +183,96 @@ These files contain normalized public proof data only. Raw signatures and secret
 are not persisted. `npm` currently reports two moderate dependency advisories; no
 forced dependency upgrade was applied because that could introduce unrelated or
 breaking changes.
+
+## Milestone 3 — Collective budget issuance
+
+Milestone 3 adds a domain-level `BudgetProposal` and `BudgetIssuer` application
+service above a `BudgetTreasuryAdapter` port. Safe SDK transaction objects remain
+inside `SafeBudgetTreasuryAdapter`; they are not used as Pact domain records.
+
+The workflow creates one Safe transaction containing an ERC-20 `transfer` to the
+configured Agent Wallet. The adapter reads the deployed Safe's current owners and
+threshold and derives approvals from distinct owner signatures attached to that
+transaction. Pact constrains the recipient and allowed token at the application
+boundary; the Safe contract independently enforces M-of-N authorization. No
+module, guard, custom contract, ERC-7710 flow, or alternative facilitator was
+introduced.
+
+Execution is idempotent within the application instance and Safe nonce semantics
+prevent an already-executed transaction from succeeding on-chain again. The
+successful execution record includes the outer transaction hash, execution time,
+and before/after token balances for both Safe and Agent Wallet. Normalized budget
+audit events contain public transaction metadata but no keys or signatures.
+
+Deterministic tests use a fake implementation of the treasury port and cover
+1-of-1, 2-of-3, 3-of-4, and 3-of-5 thresholds, every 2-of-4 signer combination,
+outsiders, duplicate approvals, ERC-20 calldata, invalid inputs, exact balance
+deltas, audit events, and double execution. The separate live test is gated by
+`RUN_LIVE_M3=true` and reads all addresses, owner keys, token metadata, amount,
+RPC, and chain ID from environment configuration.
+
+The small-funds Milestone 3 live test passed on Base Sepolia with a budget of
+1,000 atomic USDC units (0.001 USDC). Alice and Bob supplied the two distinct
+owner signatures required by the deployed 2-of-3 Safe. The outsider submitted
+the fully authorized transaction and paid gas, without contributing an approval.
+
+The Safe initially held no USDC and the Agent Wallet held no ETH. Test setup used
+the existing Coinbase CDP hosted x402 path to transfer 0.001 USDC from the Agent
+Wallet to the Safe. This was only test funding; it did not replace the Safe
+transaction used for budget issuance.
+
+| Live action | Transaction |
+| --- | --- |
+| Initial setup funding through hosted x402 | `0xce7208cacca521d1cf4eb04544d2cdfb589b46c3d849c4ebcf7dae86a5b95b20` |
+| Initial Safe execution that exposed RPC read lag | `0xc6e663368e1d620a75637b443a68853f2de6fa76d27d9df837cb06b98455d37c` |
+| Final setup funding through hosted x402 | `0xfc71489e4b0f9c6bafcf416298969f8f4159527adfc1cc15e81f76e2fd93d73c` |
+| Verified Safe budget execution | `0xff6ba98418ecb477de9ddf7ddb07dea401fcd9ef19e4fc412c529cb97e0c97da` |
+
+The final Safe transaction hash was
+`0x14a7b03b8e75b6f35cf48f327a9d14432a5aafba8077a6f39e7e7a971d32f4ab`.
+The observed Safe balance changed from 1,000 to 0 atomic units, and the Agent
+Wallet balance changed from 19,599,000 to 19,600,000. A second execution request
+returned the same execution hash, and both balances remained unchanged.
+
+An earlier live execution successfully moved the same amount, but the first
+verification attempt read stale post-receipt balances from the public RPC. The
+adapter now performs bounded uncached polling for the exact expected deltas. The
+corrected live run then passed all threshold, receipt, balance, and replay checks.
+
+Milestone 3 non-fund-consuming verification passed:
+
+```text
+npm run build
+npm test                         # 4 files, 39 tests
+npm ls --depth=0
+git diff --check
+Milestone 3 live suite          # 1 small-funds live test passed
+```
+
+### Milestone 3 → Milestone 2 smoke test
+
+The separate opt-in smoke test was enabled and passed on Base Sepolia. The Safe
+received 0.002 USDC of test funding, issued that full amount to the Agent Wallet
+after Alice and Bob supplied the required two approvals, and the Agent Wallet
+then paid the 0.001 USDC requirement returned by the existing premium endpoint
+through Coinbase CDP's hosted facilitator.
+
+| Live action | Transaction |
+| --- | --- |
+| Smoke-test Safe funding through hosted x402 | `0x71f520741bbc9e3195c46994deff71db9b38899bb11cc222d639a48e26021253` |
+| Safe budget execution | `0x30b026b0c6cf39aa87246cda29ebd5a0309787747dd0cbfdaeccc300a34750ec` |
+| Hosted x402 payment | `0x9807dc105189d7af7c8b833674a3ff776f71dda509579b6fe742101983bb12c2` |
+
+The Safe transaction hash was
+`0x1036651ad5ce05ca42cc8ed8b0a8342dabf55cb53d27055e2da49b2758ac413d`.
+Observed atomic-USDC balances were:
+
+- Safe: 2,000 → 0
+- Agent Wallet: 19,598,000 → 19,600,000 after budget → 19,599,000 after payment
+- Merchant: 500,000 → 501,000
+
+All smoke assertions passed: the initial response required payment, the payment
+was within the available budget, both Safe-to-Agent and Agent-to-merchant deltas
+were exact, the hosted settlement receipt succeeded, and the Agent Wallet kept
+the expected 0.001 USDC remainder. Evidence is written to the ignored
+`milestone3-x402-result.json` file.

@@ -1,23 +1,29 @@
-# Pact — Safe M-of-N custody and standard x402 payments
+# Pact — collective Safe budgets and standard x402 payments
 
-Pact currently proves two independent capabilities on Base Sepolia:
+Pact currently implements three narrow capabilities. Milestone 3 connects the
+first two through an explicit, collectively approved operating-budget transfer:
 
 ```text
-Alice / Bob / Carol                 Standalone Agent Wallet
-        |                                      |
-        v                                      v
-Safe M-of-N Treasury                standard x402 exact EVM
-                                               |
-                                               v
-                                  Coinbase CDP hosted facilitator
-                                               |
-                                               v
-                                     Base Sepolia USDC
+M-of-N Safe owners
+        |
+        v
+operating-budget proposal
+        |
+        v
+Safe ERC-20 transaction -- threshold approvals --> Agent Wallet
+                                                    |
+                                                    v
+                                         standard x402 exact EVM
+                                                    |
+                                                    v
+                                     Coinbase CDP hosted facilitator
 ```
 
-There is no ownership, module, delegation, funding, or permission relationship
-between the Safe and the Agent Wallet. Connecting them is intentionally deferred
-to a later milestone.
+The Agent Wallet is only the transfer recipient. It is not a Safe owner, module,
+or guard and has no way to bypass the Safe threshold. Safe contract authorization
+enforces M-of-N approval; Pact application policy restricts this particular
+workflow to the configured Agent Wallet and configured ERC-20 tokens. Those are
+separate guarantees.
 
 The implementation history, architecture decisions, live transaction evidence,
 and encountered issues are recorded in [`DEVELOPMENT_LOG.md`](DEVELOPMENT_LOG.md).
@@ -113,11 +119,69 @@ It writes normalized non-secret evidence to `milestone2-result.json`. Raw paymen
 signatures, private keys, CDP API secrets, and bearer credentials are never
 written to milestone artifacts.
 
+## Milestone 3: collective operating-budget issuance
+
+`BudgetProposal` is the Pact domain object, and `BudgetIssuer` is the application
+boundary. `SafeBudgetTreasuryAdapter` is the only Milestone 3 component that owns
+Safe SDK transaction objects. It encodes one ERC-20 `transfer`, obtains the real
+Safe transaction hash, signs it with configured Safe owners, and executes it
+through the existing Milestone 1 treasury functions.
+
+Amounts are integer token base units (`bigint`). Recipient, supported token,
+decimals, Safe address, owners, threshold, signer combination, and network are
+configuration or fixture inputs. The application reads the current Safe owners
+and threshold and derives approvals from distinct owner signatures attached to
+the Safe transaction; there is no parallel approval counter.
+
+The default test suite uses a fake treasury adapter and needs no RPC, blockchain,
+Coinbase account, or private key. It covers multiple M-of-N configurations,
+multiple signer subsets, outsider and duplicate approvals, ERC-20 encoding,
+validation, exact balance accounting, audit events, and idempotent execution.
+
+The live test is separate and opt-in:
+
+```bash
+# Configure RUN_LIVE_M3=true and the Milestone 3 variables in .env first.
+npm run test:milestone3-live
+```
+
+It connects to `SAFE_ADDRESS`, queries its actual owners and threshold, and uses
+`OWNER_PRIVATE_KEY_1`, `OWNER_PRIVATE_KEY_2`, and further consecutively numbered
+keys as needed. It refuses to run if too few configured keys belong to current
+Safe owners, the Agent Wallet is a Safe owner, token decimals disagree with the
+contract, or the Safe lacks the requested token amount. It attempts execution
+below threshold, signs until the actual threshold is reached, verifies the
+receipt and exact Safe/Agent Wallet token deltas, and confirms a replay does not
+move funds again. Non-secret evidence is written to `milestone3-result.json`.
+An optional `EXECUTOR_PRIVATE_KEY` may identify a gas-paying relay; the relay
+does not contribute an approval and need not be a Safe owner.
+Post-receipt balance reads use bounded uncached polling to tolerate public-RPC
+indexing lag without weakening the exact-delta assertions.
+
+The separate M3→M2 smoke test is also opt-in:
+
+```bash
+# Configure RUN_LIVE_M3_X402=true and the MILESTONE3_X402_* values first.
+npm run test:milestone3-x402-smoke
+```
+
+It reads an `exact` payment requirement from the existing premium endpoint,
+rejects a payment larger than the configured budget, issues the budget through
+the Safe, and then pays through Coinbase CDP's hosted facilitator. It verifies
+the Safe, Agent Wallet, and merchant token deltas independently and writes
+non-secret evidence to `milestone3-x402-result.json`.
+
+The current proposal/action store is deliberately in memory. Restart recovery
+would require a durable proposal store and a Safe Transaction Service integration;
+neither changes the authorization boundary, but neither is claimed by this MVP.
+
 ## Full live verification
 
 ```bash
 npm run test:integration
 ```
 
-This command performs both live milestones and therefore spends Base Sepolia
-ETH and USDC. The Safe and Agent Wallet remain architecturally independent.
+This command discovers all three live suites. Milestone 3 remains skipped unless
+`RUN_LIVE_M3=true`; when enabled, it spends the configured chain's gas token and
+ERC-20 balance. Milestone 2 continues to use Coinbase CDP's hosted facilitator;
+Milestone 3 does not replace or modify that settlement path.
