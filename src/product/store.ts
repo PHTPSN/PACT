@@ -336,6 +336,14 @@ export class ProductStore {
     this.db.prepare(`INSERT INTO agent_sessions (id,pact_id,budget_id,requested_by,task,status,created_at) VALUES (?,?,?,?,?,?,?)`)
       .run(sessionId, PACT_ID, String(budget.id), 'Alice', task, 'running', now);
     this.audit('Alice', 'AGENT_TASK_STARTED', 'Alice assigned a task to Qwen.', { sessionId, task });
+    const scopeStop = this.classifyScopeStop(task);
+    if (scopeStop) {
+      this.tool(sessionId, 1, 'scopeGuard', 'blocked', scopeStop.summary);
+      this.db.prepare(`UPDATE agent_sessions SET status='stopped_out_of_scope', answer=?, completed_at=? WHERE id=?`)
+        .run(scopeStop.answer, now, sessionId);
+      this.audit('Qwen', 'AGENT_TASK_STOPPED_OUT_OF_SCOPE', scopeStop.summary, { sessionId, reason: scopeStop.reason });
+      return;
+    }
     this.tool(sessionId, 1, 'inspectPaidResource', 'succeeded', 'Premium Market Brief requires 0.10 USDC. No payment was made during inspection.');
     this.tool(sessionId, 2, 'getOperatingBudget', 'succeeded', `Agent Wallet has ${(Number(pact.agent_balance_atomic) / 1_000_000).toFixed(2)} USDC available.`);
     if (Number(pact.agent_balance_atomic) < RESOURCE_PRICE) {
@@ -362,6 +370,25 @@ export class ProductStore {
     this.requireActive();
     this.db.prepare('UPDATE pacts SET agent_balance_atomic=30000, updated_at=? WHERE id=?').run(new Date().toISOString(), PACT_ID);
     this.audit('demo operator', 'BOUNDARY_TEST_PREPARED', 'The product sandbox set the Agent Wallet display balance to 0.03 USDC for an insufficient-budget test.', { evidenceMode: true });
+  }
+
+  private classifyScopeStop(task: string) {
+    const normalized = task.toLowerCase();
+    if (/(change|rewrite|modify|increase|decrease).*(ownership|revenue split|split allocation)|(?:ownership|revenue split|split allocation).*(change|rewrite|modify|increase|decrease)/.test(normalized)) {
+      return {
+        reason: 'IMMUTABLE_ECONOMIC_RIGHTS',
+        summary: 'The request was stopped because Qwen cannot modify immutable revenue ownership.',
+        answer: 'I cannot change the team’s revenue ownership. Those percentages were accepted by all founders and are immutable; the AI has no mutation authority over the Split.',
+      };
+    }
+    if (/(transfer|withdraw|move|send|take).*(treasury|safe)|(?:treasury|safe).*(transfer|withdraw|move|send|take)/.test(normalized)) {
+      return {
+        reason: 'NO_TREASURY_AUTHORITY',
+        summary: 'The request was stopped because Qwen cannot move funds from the protected team treasury.',
+        answer: 'I cannot transfer funds from the team treasury. Only the human members can authorize that path under the configured approval rule.',
+      };
+    }
+    return null;
   }
 
   private tool(sessionId: string, sequence: number, toolName: string, status: string, summary: string) {

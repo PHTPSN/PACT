@@ -1,0 +1,33 @@
+{
+  "flow": "autonomous-qwen-x402-payment",
+  "provider": "Kiln",
+  "model": "qwen3-32b",
+  "network": "eip155:84532",
+  "facilitator": "Coinbase CDP hosted facilitator",
+  "toolExecutions": [
+    { "sequence": 1, "tool": "inspectPaidResource", "success": true },
+    { "sequence": 2, "tool": "getOperatingBudget", "success": true },
+    { "sequence": 3, "tool": "paidFetch", "success": true }
+  ],
+  "auditSequence": [
+    "AGENT_TASK_STARTED",
+    "TOOL_REQUESTED:inspectPaidResource",
+    "PAID_RESOURCE_INSPECTED",
+    "TOOL_SUCCEEDED:inspectPaidResource",
+    "TOOL_REQUESTED:getOperatingBudget",
+    "TOOL_SUCCEEDED:getOperatingBudget",
+    "TOOL_REQUESTED:paidFetch",
+    "PAYMENT_REQUESTED",
+    "PAYMENT_SUCCEEDED",
+    "TOOL_SUCCEEDED:paidFetch",
+    "AGENT_TASK_COMPLETED"
+  ],
+  "payment": {
+    "amount": "0.1",
+    "currency": "USDC",
+    "httpStatus": 200,
+    "transactionHash": "0xec83e8a2448b6f7264c8f1688a25549566663ade7cd322634b29ba74d5233b89",
+    "receiptSucceeded": true
+  },
+  "secretsPersisted": false
+}

@@ -1,0 +1,32 @@
+{
+  "network": "Base Sepolia",
+  "chainId": 84532,
+  "flows": {
+    "collectiveCustody": {
+      "safe": "0x7990aa16cFa09E9d5d619c10378320d1895eb3Ae",
+      "threshold": 2,
+      "owners": 3,
+      "deploymentTx": "0xdc704492da0000fbc73b3a7407fc39a69a3384f39bd8f4c65593af392504e748",
+      "twoOwnerExecutionTx": "0x274d9df35e9d38825d4210c0b3225fb8d3555e6c81731045f04e349134bd78f2"
+    },
+    "collectiveBudget": {
+      "agentWallet": "0x0e1cBC140a9356F32Feb7eB645C595b4C19E9e2F",
+      "executionTx": "0xff6ba98418ecb477de9ddf7ddb07dea401fcd9ef19e4fc412c529cb97e0c97da",
+      "approvers": ["Alice", "Bob"],
+      "exactBalanceDeltasVerified": true
+    },
+    "agentPayment": {
+      "provider": "Kiln",
+      "model": "qwen3-32b",
+      "settlementTx": "0xec83e8a2448b6f7264c8f1688a25549566663ade7cd322634b29ba74d5233b89",
+      "amount": "0.1 USDC",
+      "resourceStatus": 200
+    },
+    "immutableRevenue": {
+      "split": "0x744052918Ad03470723Ac942f0c8381c50A99489",
+      "owner": "0x0000000000000000000000000000000000000000",
+      "creationTx": "0xf0ce85b67aaf206d8661f07037e2ea5ccf0659f38d6cb5880763d661d4fa6744",
+      "distributionTx": "0xc1dcd6cdfe27f6b38a1f1f86d84beac47600d15391518dfc4a0616235487f735"
+    }
+  }
+}

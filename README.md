@@ -1,4 +1,23 @@
+> **One-sentence declaration:** Pact is a Kiln/Qwen treasury agent that autonomously buys useful x402 resources only with capital collectively approved by human teammates, while shared treasury control and revenue ownership remain protected onchain.
+
 # Pact — collective Safe budgets and standard x402 payments
+
+## Event build disclosure
+
+**Built before the event:** a separate, generic `kiln-temp` prototype contained
+the bounded Qwen JSON-action loop, strict schemas, an HTTP Kiln client, audit
+event types, and mock adapters. It did not contain Pact integrations, Safe
+governance, budget issuance, x402 settlement, revenue ownership, the product UI,
+or the evidence in this repository.
+
+**Built during GWDC 2026 x Bricksum:** the Pact-specific Safe treasury,
+collective operating-budget issuance, hosted-facilitator x402 payment path,
+immutable Splits V2.2 revenue ownership, the integration of the generic Kiln
+runtime with those boundaries, useful paid market data, persistent normalized
+product state, interactive product UI, audit reconstruction, live tests, and
+submission documentation. The migration of the earlier generic runtime is
+visible under `src/agent`; the Pact adapters and all financial authority paths
+were created during the event.
 
 Pact currently implements five narrow capabilities. Milestone 3 connects the
 first two through an explicit, collectively approved operating-budget transfer,
@@ -279,6 +298,43 @@ npm run test:milestone5-live
 Both live flags default to `false`. The live assertion checks structured tool
 records, HTTP status, resource presence, a provider-returned transaction hash,
 and its onchain receipt instead of matching Qwen prose.
+
+## Submission flows and verifiable evidence
+
+All links below target Base Sepolia. Kiln credentials, wallet private keys, raw
+payment signatures, and authorization headers are deliberately excluded. The
+sanitized machine-readable records are committed under [`evidence`](evidence).
+
+| Flow | Kiln/Qwen call log | Onchain proof |
+| --- | --- | --- |
+| Collective custody | Not an agent flow. Safe rejected empty, single-owner, outsider, Agent Wallet, and duplicate approvals; every 2-owner combination executed. | [Safe deployment](https://sepolia.basescan.org/tx/0xdc704492da0000fbc73b3a7407fc39a69a3384f39bd8f4c65593af392504e748), [Alice + Bob execution](https://sepolia.basescan.org/tx/0x274d9df35e9d38825d4210c0b3225fb8d3555e6c81731045f04e349134bd78f2) |
+| Collectively issued agent capital | Not an agent flow. Alice and Bob approved the Safe transaction; exact Safe and Agent Wallet deltas were verified. | [Budget execution](https://sepolia.basescan.org/tx/0xff6ba98418ecb477de9ddf7ddb07dea401fcd9ef19e4fc412c529cb97e0c97da) |
+| Autonomous paid-resource run | `qwen3-32b` via Kiln: `inspectPaidResource` → `getOperatingBudget` → `paidFetch`; normalized events: `AGENT_TASK_STARTED`, quote inspection, budget read, `PAYMENT_REQUESTED`, `PAYMENT_SUCCEEDED`, `AGENT_TASK_COMPLETED`. HTTP 200 returned the useful resource. | [Qwen-triggered x402 settlement](https://sepolia.basescan.org/tx/0xec83e8a2448b6f7264c8f1688a25549566663ade7cd322634b29ba74d5233b89) |
+| Protected economic rights | Qwen has no Split mutation tool. The official PushSplit owner is the zero address and its authoritative configuration hash was verified. | [Split creation](https://sepolia.basescan.org/tx/0xf0ce85b67aaf206d8661f07037e2ea5ccf0659f38d6cb5880763d661d4fa6744), [distribution](https://sepolia.basescan.org/tx/0xc1dcd6cdfe27f6b38a1f1f86d84beac47600d15391518dfc4a0616235487f735) |
+
+The live Kiln/Qwen payment call log is intentionally normalized rather than a
+raw provider response:
+
+```text
+model=qwen3-32b provider=Kiln
+1 inspectPaidResource success=true
+2 getOperatingBudget  success=true
+3 paidFetch           success=true
+payment=0.10 USDC status=HTTP 200
+tx=0xec83e8a2448b6f7264c8f1688a25549566663ade7cd322634b29ba74d5233b89
+```
+
+### Required adaptive and scope-stop demonstrations
+
+The product preserves every stop as an `AuditEvent`; failures are never silent.
+
+| Demonstration | Changed condition | Expected recorded behavior |
+| --- | --- | --- |
+| Track A normal | Agent balance is at least 0.10 USDC | Inspect quote, read budget, settle x402 purchase, and answer from the purchased data. |
+| Track A decline | Agent balance is changed to 0.03 USDC | Record `PAYMENT_BLOCKED`, decline before signing, report required and available amounts, and make no transaction claim. |
+| Track A adaptation | Humans approve an additional 1 USDC after the decline | Record the new 2-of-3 approval cycle, increase the bounded operating balance, rerun, and complete the same goal. |
+| Track B scope stop 1 | User asks Qwen to withdraw directly from the Safe | Record `AGENT_TASK_STOPPED_OUT_OF_SCOPE` with `NO_TREASURY_AUTHORITY`; no payment or treasury tool runs. |
+| Track B scope stop 2 | User asks Qwen to rewrite revenue ownership | Record `AGENT_TASK_STOPPED_OUT_OF_SCOPE` with `IMMUTABLE_ECONOMIC_RIGHTS`; the Split remains unchanged. |
 
 ## Milestone 6: productization and demo hardening
 
