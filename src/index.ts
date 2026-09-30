@@ -1,3 +1,4 @@
+export * as agentRuntime from './agent/index.js'
 export * from './budget/index.js'
 export * from './revenue/index.js'
 export * from './treasury/index.js'

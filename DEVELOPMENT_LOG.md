@@ -362,3 +362,58 @@ The Agent Wallet, Safe, and deployer each received zero and held no control.
 Evidence for the successful run is stored in the ignored
 `milestone4-result.json`; `RUN_LIVE_M4` was returned to `false` afterward to
 prevent accidental repeat spending.
+
+## Milestone 5 — Kiln/Qwen agent integration
+
+The isolated `kiln-temp` runtime was migrated into `src/agent` without changing
+its model boundary: `HttpKilnClient` is still the only Kiln transport, the model
+identifier remains fixed to `qwen3-32b`, and the agent accepts only validated
+JSON actions. The original 17 deterministic runtime tests were migrated with it.
+
+Pact adapters connect the runtime to existing capabilities without exposing SDK
+objects or authority. `PactTreasuryReader` uses `inspectTreasury` and an ERC-20
+balance read. `PactBudgetReader` reads the Agent Wallet's actual token balance.
+`PactPaymentGateway` obtains its quote from an unsigned HTTP 402 response and
+passes paid execution to the unchanged M2 `createPaidFetch` implementation.
+`InMemoryAuditLog` is the M5 audit reader/emitter; durable persistence remains out
+of scope.
+
+The new x402 quote inspector is read-only. It selects only the same M2 profile:
+x402 v2, exact scheme, Base Sepolia, official Base Sepolia USDC, EIP-3009, and
+authorization flow. It has no signer and cannot construct a payment header. The
+payment adapter additionally rejects quotes above its configured fixed ceiling
+or the optional maximum supplied with a tool request before calling M2.
+
+The tool registry remains exactly five entries. Negative tests prove that Safe
+funding/governance tools, spending-limit tools, raw USDC transfer tools, and M4
+Split mutation tools are unregistered; malformed `paidFetch` input cannot reach
+the gateway; payment-policy rejection and insufficient balance do not create a
+transaction record; invalid transaction hashes are rejected; and repeated tool
+requests stop at the configured loop bound.
+
+Two opt-in live suites were added. Gate 2 runs real Kiln/Qwen3-32B against mock
+money. Gate 3 runs Qwen against the real adapter and existing hosted-facilitator
+x402 path using a configured resource URL and already-funded Agent Wallet. Both
+default to disabled and neither is part of `npm test`.
+
+Gate 2 passed all three live-model tests using the ignored Kiln credential from
+the original `kiln-temp` workspace. Qwen3-32B answered without tools, called a
+read tool, inspected and fetched a mocked paid resource, consumed the tool
+result, returned a final answer, and represented a mocked gateway rejection
+without success evidence.
+
+Gate 3 passed with the existing M2 premium JSON resource supplied through the
+runtime test configuration. Qwen called `inspectPaidResource`,
+`getOperatingBudget`, and `paidFetch`. The unchanged M2 client paid 0.1 USDC
+through Coinbase's hosted facilitator, received HTTP 200 with
+`{"premiumData":"hello"}`, and returned a successful onchain receipt for:
+
+```text
+0xec83e8a2448b6f7264c8f1688a25549566663ade7cd322634b29ba74d5233b89
+```
+
+The normalized audit sequence was `AGENT_TASK_STARTED`, quote tool request and
+inspection success, budget tool request and success, payment tool request,
+`PAYMENT_REQUESTED`, `PAYMENT_SUCCEEDED`, tool success, and
+`AGENT_TASK_COMPLETED`. The local premium server was stopped immediately after
+the single successful payment, and no live switch was written to `.env`.

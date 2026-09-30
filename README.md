@@ -1,8 +1,9 @@
 # Pact — collective Safe budgets and standard x402 payments
 
-Pact currently implements four narrow capabilities. Milestone 3 connects the
+Pact currently implements five narrow capabilities. Milestone 3 connects the
 first two through an explicit, collectively approved operating-budget transfer,
-while Milestone 4 adds an independent economic-ownership path:
+Milestone 4 adds an independent economic-ownership path, and Milestone 5 gives
+Qwen a bounded tool runtime that can spend only from the Agent Wallet:
 
 ```text
 M-of-N Safe owners
@@ -23,6 +24,8 @@ Immutable economic ownership
         |
         v
 Splits V2.2 PushSplit -- permissionless distribution --> team recipients
+
+Qwen task -- inspect quote --> bounded paidFetch --> useful market brief
 ```
 
 The Agent Wallet is only the transfer recipient. It is not a Safe owner, module,
@@ -228,6 +231,99 @@ distributes, uses bounded uncached balance polling, checks exact recipient delta
 and verifies that the Agent Wallet, Safe, and deployer receive nothing unless
 configured as recipients. Non-secret evidence is written to
 `milestone4-result.json`.
+
+## Milestone 5: Kiln/Qwen agent runtime
+
+Milestone 5 integrates the previously isolated `kiln-temp` runtime under
+`src/agent`. The bounded loop, strict Zod schemas, Kiln-only Qwen client,
+normalized audit events, mocks, and exact five-tool allowlist are preserved.
+Pact-specific code lives behind four narrow ports:
+
+- `PactTreasuryReader` calls the existing Safe inspection code and reads the
+  configured ERC-20 balance.
+- `PactBudgetReader` reads capital already held by the Agent Wallet; it cannot
+  propose or issue a Safe budget.
+- `PactPaymentGateway` uses the unsigned M2 quote inspector and delegates every
+  paid request to the existing `createPaidFetch` EIP-3009 client.
+- `InMemoryAuditLog` supplies the read-only M5 audit source and emitter without
+  adding persistence.
+
+The model never receives wallet objects, keys, signatures, raw transactions, or
+x402 headers. Safe governance, budget issuance, spending-limit mutation, and M4
+Split mutation are absent from the tool registry. The only tools are
+`getTreasuryState`, `getOperatingBudget`, `inspectPaidResource`, `paidFetch`, and
+`getAuditHistory`.
+
+Run the deterministic integration gate with:
+
+```bash
+npm run test:milestone5-gate1
+```
+
+Gate 2 uses live Kiln/Qwen3-32B but deterministic mock adapters. It requires
+`KILN_API_KEY` and explicit `RUN_LIVE_QWEN=true`:
+
+```bash
+npm run test:milestone5-qwen-live
+```
+
+Gate 3 uses the configured, already-funded Agent Wallet and the existing hosted-
+facilitator x402 path. It does not issue a Safe budget. Configure
+`MILESTONE5_PAID_RESOURCE_URL`, `MILESTONE5_MAX_PAYMENT_ATOMIC`, and the existing
+chain/wallet variables, then explicitly set `RUN_LIVE_M5=true`:
+
+```bash
+npm run test:milestone5-live
+```
+
+Both live flags default to `false`. The live assertion checks structured tool
+records, HTTP status, resource presence, a provider-returned transaction hash,
+and its onchain receipt instead of matching Qwen prose.
+
+## Milestone 6: productization and demo hardening
+
+M6 adds an interactive product application in [`product`](product), served by
+[`src/product`](src/product), without changing the M1–M5 protocol architecture.
+Its three working views consume the same local SQLite state:
+
+- **Team Pact** guides member verification, founding acceptance, the approval
+  rule, and immutable revenue ownership.
+- **AI Treasurer** shows the jointly controlled Safe treasury, approved Agent
+  Wallet budget, Qwen task, tool execution, x402 receipt, and remaining exposure.
+- **Controls & Audit** reconstructs member approvals, bounded capital issuance,
+  immutable revenue ownership, and normalized evidence in chronological order.
+
+The product-state database is an evidence and presentation layer only. Safe
+contract authorization, the Agent Wallet's onchain balance, Coinbase CDP's
+hosted x402 facilitator, and the immutable Splits contract remain the financial
+authorities. Raw private keys, signatures, and x402 authorization headers are
+never persisted.
+
+The paid endpoint now returns a deterministic launch-market brief rather than
+`{"premiumData":"hello"}`. Qwen needs that paid result to compare Seoul,
+Singapore, and Tokyo and select the strongest launch market; the standard x402
+payment and hosted-facilitator settlement path are unchanged.
+
+```bash
+npm ci
+npm run build
+npm run product:start
+```
+
+Open `http://127.0.0.1:4180`. The product has a guarded **Reset scenario**
+action. Reset deletes and recreates only normalized product-demo records; it
+cannot move funds, modify the Safe, change the Split, issue a live budget, or
+replay a payment. Product interactions are clearly labeled as sandbox state and
+link to independently verifiable Base Sepolia evidence. The complete demo flow
+and submission evidence are in [`DEMO_RUNBOOK.md`](DEMO_RUNBOOK.md).
+
+### Render deployment
+
+The root [`render.yaml`](render.yaml) defines a free Node web service. Render
+injects `PORT`; the server binds to `0.0.0.0` and serves both the product UI and
+API. The free service filesystem is ephemeral, so its local SQLite scenario
+state resets whenever Render restarts, redeploys, or spins the service down.
+This is acceptable for the seeded demo but is not durable production storage.
 
 ## Full live verification
 

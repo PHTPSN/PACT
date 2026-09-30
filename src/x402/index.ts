@@ -1,4 +1,5 @@
 export * from './constants.js'
 export * from './createPaidFetch.js'
+export * from './inspectPaidResource.js'
 export * from './premiumServer.js'
 export * from './types.js'

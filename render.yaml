@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: pact-product
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm run product:start
+    healthCheckPath: /api/state
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0

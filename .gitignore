@@ -8,3 +8,8 @@ milestone2-result.json
 milestone3-result.json
 milestone3-x402-result.json
 milestone4-result.json
+milestone5-result.json
+.pact/
+# Presentation sites are separate deliverables owned by other sessions.
+/frontend/
+/judge-site/

@@ -250,7 +250,7 @@ describe.skipIf(!enabled)('Milestone 3 to Milestone 2 x402 smoke test', () => {
         maximumPaymentAmount: requirement.amount,
         expectedPayTo: payTo,
       })
-      const payment = await paidFetch<{ premiumData: string }>(endpoint, {
+      const payment = await paidFetch<{ recommendation: { primaryMarket: string } }>(endpoint, {
         headers: { accept: 'application/json' },
       })
       const paymentReceipt = await publicClient.getTransactionReceipt({

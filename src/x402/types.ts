@@ -45,3 +45,30 @@ export type PaidFetchConfig = {
   expectedPayTo?: Address
   fetch?: typeof globalThis.fetch
 }
+
+export type PaidResourceInspection =
+  | {
+      url: string
+      status: number
+      requiresPayment: false
+    }
+  | {
+      url: string
+      status: 402
+      requiresPayment: true
+      x402Version: 2
+      scheme: string
+      network: string
+      asset: string
+      amount: bigint
+      payTo: Address
+      assetTransferMethod: string
+      paymentFlow: string
+    }
+
+export type InspectPaidResourceConfig = {
+  expectedNetwork?: string
+  expectedAsset?: Address
+  expectedPayTo?: Address
+  fetch?: typeof globalThis.fetch
+}

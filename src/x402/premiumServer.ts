@@ -17,6 +17,39 @@ export type PremiumServerConfig = {
   payTo: Address
   amount?: bigint
 }
+
+export const PREMIUM_MARKET_BRIEF = Object.freeze({
+  reportId: 'pact-market-brief-2026-q3',
+  title: 'Autonomous Agent Launch Market Brief',
+  asOf: '2026-09-29',
+  markets: [
+    {
+      market: 'Seoul',
+      developerAdoptionScore: 92,
+      paidAgentReadinessScore: 89,
+      estimatedAcquisitionCostUsd: 42,
+    },
+    {
+      market: 'Singapore',
+      developerAdoptionScore: 84,
+      paidAgentReadinessScore: 86,
+      estimatedAcquisitionCostUsd: 58,
+    },
+    {
+      market: 'Tokyo',
+      developerAdoptionScore: 79,
+      paidAgentReadinessScore: 74,
+      estimatedAcquisitionCostUsd: 71,
+    },
+  ],
+  recommendation: {
+    primaryMarket: 'Seoul',
+    rationale:
+      'Highest combined developer adoption and paid-agent readiness with acquisition cost below the cohort median.',
+  },
+  methodology:
+    'Deterministic demo dataset for validating paid-resource use in the Pact Qwen workflow.',
+})
 export function createPremiumServer({
   payTo,
   amount = TEN_CENTS_USDC,
@@ -64,7 +97,7 @@ export function createPremiumServer({
     ),
   )
   app.get('/premium', (_request, response) => {
-    response.status(200).json({ premiumData: 'hello' })
+    response.status(200).json(PREMIUM_MARKET_BRIEF)
   })
 
   return app

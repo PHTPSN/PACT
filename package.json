@@ -3,21 +3,29 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run test:unit",
-    "test:unit": "vitest run --exclude tests/milestone1/base-sepolia.integration.test.ts --exclude tests/milestone2/base-sepolia.integration.test.ts --exclude tests/milestone3/budget-issuance.integration.test.ts --exclude tests/milestone3/x402-smoke.integration.test.ts --exclude tests/milestone4/revenue-split.integration.test.ts",
+    "test:unit": "vitest run --exclude tests/milestone1/base-sepolia.integration.test.ts --exclude tests/milestone2/base-sepolia.integration.test.ts --exclude tests/milestone3/budget-issuance.integration.test.ts --exclude tests/milestone3/x402-smoke.integration.test.ts --exclude tests/milestone4/revenue-split.integration.test.ts --exclude tests/milestone5/qwen.integration.test.ts --exclude tests/milestone5/qwen-x402.integration.test.ts",
     "test:integration": "node --env-file=.env --use-env-proxy node_modules/vitest/vitest.mjs run tests/milestone1/base-sepolia.integration.test.ts tests/milestone2/base-sepolia.integration.test.ts tests/milestone3/budget-issuance.integration.test.ts tests/milestone3/x402-smoke.integration.test.ts tests/milestone4/revenue-split.integration.test.ts",
     "test:milestone1-live": "node --env-file=.env --use-env-proxy node_modules/vitest/vitest.mjs run tests/milestone1/base-sepolia.integration.test.ts",
     "test:milestone2-live": "node --env-file=.env --use-env-proxy node_modules/vitest/vitest.mjs run tests/milestone2/base-sepolia.integration.test.ts",
     "test:milestone3-live": "node --env-file=.env --use-env-proxy node_modules/vitest/vitest.mjs run tests/milestone3/budget-issuance.integration.test.ts",
     "test:milestone3-x402-smoke": "node --env-file=.env --use-env-proxy node_modules/vitest/vitest.mjs run tests/milestone3/x402-smoke.integration.test.ts",
     "test:milestone4-live": "node --env-file=.env --use-env-proxy node_modules/vitest/vitest.mjs run tests/milestone4/revenue-split.integration.test.ts",
+    "test:milestone5-gate1": "vitest run tests/agent tests/x402/inspect-paid-resource.test.ts",
+    "test:milestone5-qwen-live": "node --env-file=.env --use-env-proxy node_modules/vitest/vitest.mjs run tests/milestone5/qwen.integration.test.ts",
+    "test:milestone5-live": "node --env-file=.env --use-env-proxy node_modules/vitest/vitest.mjs run tests/milestone5/qwen-x402.integration.test.ts",
     "setup:milestone1": "npm run build --silent && node --env-file=.env --use-env-proxy dist/scripts/setup/milestone1Accounts.js",
     "demo:milestone1": "npm run build --silent && node --env-file=.env --use-env-proxy dist/scripts/demo/milestone1.js",
     "check:milestone2-capabilities": "npm run build --silent && node --env-file=.env --use-env-proxy dist/scripts/setup/checkCdpCapabilities.js",
     "server:milestone2": "npm run build --silent && node --env-file=.env --use-env-proxy dist/scripts/server/milestone2.js",
-    "demo:milestone2": "npm run build --silent && node --env-file=.env --use-env-proxy dist/scripts/demo/milestone2.js"
+    "demo:milestone2": "npm run build --silent && node --env-file=.env --use-env-proxy dist/scripts/demo/milestone2.js",
+    "product:dev": "tsx src/product/server.ts",
+    "product:start": "node dist/src/product/server.js"
   },
   "dependencies": {
     "@0xsplits/splits-sdk": "6.6.0",
@@ -33,7 +41,8 @@
     "@x402/svm": "2.27.0",
     "dotenv": "^17.2.2",
     "express": "^5.2.1",
-    "viem": "2.57.0"
+    "viem": "2.57.0",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",

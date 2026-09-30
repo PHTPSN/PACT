@@ -95,7 +95,7 @@ export async function runMilestone2Proof() {
         capturedPayment = header
       }),
     })
-    const first = await paidFetch<{ premiumData: string }>(canonical.endpoint, {
+    const first = await paidFetch<{ recommendation: { primaryMarket: string } }>(canonical.endpoint, {
       headers: { accept: 'application/json' },
     })
     if (!capturedPayment) throw new Error('The signed payment header was not captured.')
@@ -168,7 +168,7 @@ export async function runMilestone2Proof() {
         Array.isArray(unpaidRequirements.accepts),
       successfulPayment:
         first.response.status === 200 &&
-        first.resource.premiumData === 'hello' &&
+        first.resource.recommendation.primaryMarket === 'Seoul' &&
         first.settlement.success,
       onchainEvidence:
         firstReceipt.status === 'success' &&
@@ -211,7 +211,7 @@ export async function runMilestone2Proof() {
       repeatTransactionHash: second.settlement.transaction,
       replayStatus: replayResponse.status,
       insufficientStatuses,
-      resourceReceived: first.resource.premiumData === 'hello',
+      resourceReceived: first.resource.recommendation.primaryMarket === 'Seoul',
       results,
       pass: Object.values(results).every(Boolean),
     }

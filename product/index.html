@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0d12" />
+    <title>Pact — Team money, governed together</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="rail">
+        <div class="brand"><span class="brand-mark">P</span><span>PACT</span></div>
+        <nav aria-label="Product views">
+          <button class="nav-item active" data-view="setup"><span>01</span>Team Pact</button>
+          <button class="nav-item" data-view="treasurer"><span>02</span>AI Treasurer</button>
+          <button class="nav-item" data-view="audit"><span>03</span>Controls & Audit</button>
+        </nav>
+        <div class="rail-foot">
+          <span class="network-dot"></span>
+          <div><strong>Base Sepolia</strong><small>Product sandbox</small></div>
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div><p class="eyebrow">TEAM WORKSPACE</p><h1 id="page-title">Create your Pact</h1></div>
+          <div class="top-actions">
+            <span id="pact-status" class="status-pill">Loading</span>
+            <button class="button ghost" data-action="reset">Reset scenario</button>
+          </div>
+        </header>
+
+        <div id="authority-notice" class="authority-notice"></div>
+        <section id="app" aria-live="polite"><div class="loading">Loading product state…</div></section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
